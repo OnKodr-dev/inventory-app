@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
 
-import { InventoryProvider } from "./context/InventoryContext.jsx";
+import { InventoryProvider } from "./context/InventoryProvider.jsx";
 
 import AppLayout from "./layouts/AppLayout.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
