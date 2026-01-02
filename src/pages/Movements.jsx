@@ -1,23 +1,25 @@
 import { useMemo } from "react";
-import { items, movements } from "../data/mockData.js";
+import { useInventory } from "../context/useInventory.js";
 
 function formatDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString();
+  return new Date(iso).toLocaleString();
 }
 
 export default function Movements() {
+  const { items, movements } = useInventory();
+
+  
   const itemById = useMemo(() => {
-    const map = {};
-    for (const it of items) map[it.id] = it;
-    return map;
-  }, []);
+    const map = {}; // vytvoří prázdný obj
+    for (const it of items) map[it.id] = it; // projde všechny items a uloží item pod jeho id
+    return map; // vrací hotovou mapu
+  }, [items]); // prepočítá jen když se změní items
 
   const sorted = useMemo(() => {
-    return [...movements].sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    return [...movements].sort( // udělá kopii
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt) // vrací menší větší datum pro pořadí
     );
-  }, []);
+  }, [movements]); // přepočítá se při přidání pohybu
 
   return (
     <div className="space-y-6">

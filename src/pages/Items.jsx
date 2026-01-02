@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { items, movements } from "../data/mockData.js";
+import { useInventory } from "../context/useInventory.js";
 import { computeStockByItemId } from "../utils/stock.js";
 
 function Badge({ children }) {
@@ -11,9 +11,14 @@ function Badge({ children }) {
 }
 
 export default function Items() {
+  const { items, movements } = useInventory();
+
   const [query, setQuery] = useState("");
 
-  const stockById = useMemo(() => computeStockByItemId(movements), []);
+  const stockById = useMemo(
+    () => computeStockByItemId(movements),
+    [movements]
+  );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -31,7 +36,7 @@ export default function Items() {
           it.sku.toLowerCase().includes(q)
         );
       });
-  }, [query, stockById]);
+  }, [query, stockById, items]);
 
   return (
     <div className="space-y-6">
@@ -84,7 +89,11 @@ export default function Items() {
                 <td className="px-4 py-3 text-slate-200">{it.minStock}</td>
 
                 <td className="px-4 py-3">
-                  {it.isLow ? <Badge>Low stock</Badge> : <span className="text-slate-300">OK</span>}
+                  {it.isLow ? (
+                    <Badge>Low stock</Badge>
+                  ) : (
+                    <span className="text-slate-300">OK</span>
+                  )}
                 </td>
               </tr>
             ))}
