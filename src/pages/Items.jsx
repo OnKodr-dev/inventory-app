@@ -10,10 +10,28 @@ function Badge({ children }) {
   );
 }
 
+function FilterPill({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-full border px-3 py-1 text-xs font-medium",
+        active
+          ? "border-slate-600 bg-slate-800/60 text-slate-100"
+          : "border-slate-800 bg-slate-900/20 text-slate-300 hover:bg-slate-900/40",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Items() {
   const { items, movements } = useInventory();
 
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("ALL"); // ALL | LOW | OUT
 
   const stockById = useMemo(
     () => computeStockByItemId(movements),
@@ -23,11 +41,12 @@ export default function Items() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    return items
+    const enriched = items
       .map((it) => {
         const stock = stockById[it.id] ?? 0;
         const isLow = stock < it.minStock;
-        return { ...it, stock, isLow };
+        const isOut = stock === 0;
+        return { ...it, stock, isLow, isOut };
       })
       .filter((it) => {
         if (!q) return true;
@@ -36,7 +55,36 @@ export default function Items() {
           it.sku.toLowerCase().includes(q)
         );
       });
-  }, [query, stockById, items]);
+
+    if (filter === "LOW") return enriched.filter((it) => it.isLow);
+    if (filter === "OUT") return enriched.filter((it) => it.isOut);
+    return enriched;
+  }, [query, stockById, items, filter]);
+
+  const counts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    const base = items
+      .map((it) => {
+        const stock = stockById[it.id] ?? 0;
+        const isLow = stock < it.minStock;
+        const isOut = stock === 0;
+        return { ...it, stock, isLow, isOut };
+      })
+      .filter((it) => {
+        if (!q) return true;
+        return (
+          it.name.toLowerCase().includes(q) ||
+          it.sku.toLowerCase().includes(q)
+        );
+      });
+
+    const all = base.length;
+    const low = base.filter((it) => it.isLow).length;
+    const out = base.filter((it) => it.isOut).length;
+
+    return { all, low, out };
+  }, [items, stockById, query]);
 
   return (
     <div className="space-y-6">
@@ -56,6 +104,30 @@ export default function Items() {
             className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             placeholder="e.g. HDMI, USBC-65W..."
           />
+        </div>
+      </div>
+
+      {/* FILTER BAR */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-300">
+          Showing{" "}
+          <span className="font-semibold text-slate-100">{rows.length}</span> of{" "}
+          <span className="font-semibold text-slate-100">{counts.all}</span>{" "}
+          items
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <FilterPill active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+            All <span className="ml-1 text-slate-400">({counts.all})</span>
+          </FilterPill>
+
+          <FilterPill active={filter === "LOW"} onClick={() => setFilter("LOW")}>
+            Low <span className="ml-1 text-slate-400">({counts.low})</span>
+          </FilterPill>
+
+          <FilterPill active={filter === "OUT"} onClick={() => setFilter("OUT")}>
+            Out <span className="ml-1 text-slate-400">({counts.out})</span>
+          </FilterPill>
         </div>
       </div>
 
@@ -89,7 +161,9 @@ export default function Items() {
                 <td className="px-4 py-3 text-slate-200">{it.minStock}</td>
 
                 <td className="px-4 py-3">
-                  {it.isLow ? (
+                  {it.isOut ? (
+                    <Badge>Out of stock</Badge>
+                  ) : it.isLow ? (
                     <Badge>Low stock</Badge>
                   ) : (
                     <span className="text-slate-300">OK</span>
@@ -101,7 +175,7 @@ export default function Items() {
             {rows.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-slate-400" colSpan={5}>
-                  No items match your search.
+                  No items match your search/filter.
                 </td>
               </tr>
             )}
