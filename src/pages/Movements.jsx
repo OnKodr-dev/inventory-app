@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useInventory } from "../context/useInventory.js";
+import { computeStockByItemId } from "../utils/stock.js";
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString();
@@ -12,12 +13,17 @@ export default function Movements() {
   const [type, setType] = useState("IN");
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState("");
+  const [error, setError] = useState("");
 
   const itemById = useMemo(() => {
     const map = {};
     for (const it of items) map[it.id] = it;
     return map;
   }, [items]);
+
+  const stockById = useMemo(() => computeStockByItemId(movements), [movements]);
+  const currentStock = stockById[itemId] ?? 0;
+  const currentItem = itemById[itemId];
 
   const sorted = useMemo(() => {
     return [...movements].sort(
@@ -27,20 +33,40 @@ export default function Movements() {
 
   function onSubmit(e) {
     e.preventDefault();
+    setError("");
 
     const numQty = Number(qty);
 
     if (!itemId) return;
-    if (!Number.isFinite(numQty)) return;
+    if (!Number.isFinite(numQty)) {
+      setError("Qty musí být číslo.");
+      return;
+    }
 
     // IN/OUT: qty musí být kladné
     if (type === "IN" || type === "OUT") {
-      if (numQty <= 0) return;
+      if (numQty <= 0) {
+        setError("IN/OUT: qty musí být kladné číslo.");
+        return;
+      }
     }
 
-    // ADJUST: dovolíme i záporné hodnoty (korekce), ale 0 nedává smysl
+    // ADJUST: dovolíme i záporné hodnoty, ale 0 nedává smysl
     if (type === "ADJUST") {
-      if (numQty === 0) return;
+      if (numQty === 0) {
+        setError("ADJUST: 0 nedává smysl (žádná změna).");
+        return;
+      }
+    }
+
+    // A) OUT nesmí jít pod nulu
+    if (type === "OUT" && numQty > currentStock) {
+      setError(
+        `Nedostatek na skladě. Aktuálně: ${currentStock} ${
+          currentItem?.unit ?? ""
+        }`
+      );
+      return;
     }
 
     addMovement({
@@ -70,7 +96,10 @@ export default function Movements() {
             <label className="text-xs text-slate-400">Item</label>
             <select
               value={itemId}
-              onChange={(e) => setItemId(e.target.value)}
+              onChange={(e) => {
+                setItemId(e.target.value);
+                setError("");
+              }}
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             >
               {items.map((it) => (
@@ -79,13 +108,24 @@ export default function Movements() {
                 </option>
               ))}
             </select>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Current stock:{" "}
+              <span className="text-slate-200 font-medium">
+                {currentStock}
+              </span>{" "}
+              {currentItem?.unit ?? ""}
+            </p>
           </div>
 
           <div>
             <label className="text-xs text-slate-400">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => {
+                setType(e.target.value);
+                setError("");
+              }}
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             >
               <option value="IN">IN</option>
@@ -105,9 +145,16 @@ export default function Movements() {
             <input
               type="number"
               value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              onChange={(e) => {
+                setQty(e.target.value);
+                setError("");
+              }}
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             />
+
+            {error ? (
+              <p className="mt-1 text-xs text-red-300">{error}</p>
+            ) : null}
           </div>
 
           <div className="md:col-span-3">
