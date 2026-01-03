@@ -42,7 +42,7 @@ export default function Items() {
   const [formError, setFormError] = useState("");
   const [actionError, setActionError] = useState("");
 
-  // ✅ Edit state
+  // Edit state
   const [editingId, setEditingId] = useState(null); // string | null
   const [editName, setEditName] = useState("");
   const [editSku, setEditSku] = useState("");
@@ -139,7 +139,7 @@ export default function Items() {
     }
   }
 
-  // ✅ start edit (naplní draft inputy hodnotama z řádku)
+  // start edit (naplní draft inputy hodnotama z řádku)
   function startEdit(it) {
     setActionError("");
     setFormError("");
@@ -151,7 +151,7 @@ export default function Items() {
     setEditMinStock(it.minStock);
   }
 
-  // ✅ cancel edit (zahodí draft)
+  // cancel edit (zahodí draft)
   function cancelEdit() {
     setEditingId(null);
     setEditName("");
@@ -160,7 +160,7 @@ export default function Items() {
     setEditMinStock(0);
   }
 
-  // ✅ save edit (validace + updateItem)
+  // save edit (validace + updateItem)
   function saveEdit(id) {
     setActionError("");
     setFormError("");
