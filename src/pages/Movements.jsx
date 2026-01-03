@@ -31,43 +31,50 @@ export default function Movements() {
     );
   }, [movements]);
 
+  // 👉 UX validace pro disabled button (vypočítá se průběžně)
+  const { isValid, errorMsg } = useMemo(() => {
+    if (!itemId) return { isValid: false, errorMsg: "Vyber item." };
+
+    const numQty = Number(qty);
+    if (!Number.isFinite(numQty)) {
+      return { isValid: false, errorMsg: "Qty musí být číslo." };
+    }
+
+    if (type === "IN" || type === "OUT") {
+      if (numQty <= 0) {
+        return { isValid: false, errorMsg: "IN/OUT: qty musí být kladné." };
+      }
+      if (type === "OUT" && numQty > currentStock) {
+        return {
+          isValid: false,
+          errorMsg: `Nedostatek na skladě. Aktuálně: ${currentStock} ${
+            currentItem?.unit ?? ""
+          }`,
+        };
+      }
+    }
+
+    if (type === "ADJUST") {
+      if (numQty === 0) {
+        return { isValid: false, errorMsg: "ADJUST: 0 nedává smysl." };
+      }
+    }
+
+    return { isValid: true, errorMsg: "" };
+  }, [itemId, qty, type, currentStock, currentItem]);
+
   function onSubmit(e) {
     e.preventDefault();
+
+    // pojistka – kdyby někdo obešel disabled (např. Enter / devtools)
+    if (!isValid) {
+      setError(errorMsg || "Formulář není validní.");
+      return;
+    }
+
     setError("");
 
     const numQty = Number(qty);
-
-    if (!itemId) return;
-    if (!Number.isFinite(numQty)) {
-      setError("Qty musí být číslo.");
-      return;
-    }
-
-    // IN/OUT: qty musí být kladné
-    if (type === "IN" || type === "OUT") {
-      if (numQty <= 0) {
-        setError("IN/OUT: qty musí být kladné číslo.");
-        return;
-      }
-    }
-
-    // ADJUST: dovolíme i záporné hodnoty, ale 0 nedává smysl
-    if (type === "ADJUST") {
-      if (numQty === 0) {
-        setError("ADJUST: 0 nedává smysl (žádná změna).");
-        return;
-      }
-    }
-
-    // A) OUT nesmí jít pod nulu
-    if (type === "OUT" && numQty > currentStock) {
-      setError(
-        `Nedostatek na skladě. Aktuálně: ${currentStock} ${
-          currentItem?.unit ?? ""
-        }`
-      );
-      return;
-    }
 
     addMovement({
       itemId,
@@ -111,9 +118,7 @@ export default function Movements() {
 
             <p className="mt-1 text-xs text-slate-400">
               Current stock:{" "}
-              <span className="text-slate-200 font-medium">
-                {currentStock}
-              </span>{" "}
+              <span className="text-slate-200 font-medium">{currentStock}</span>{" "}
               {currentItem?.unit ?? ""}
             </p>
           </div>
@@ -152,9 +157,13 @@ export default function Movements() {
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             />
 
-            {error ? (
-              <p className="mt-1 text-xs text-red-300">{error}</p>
+            {/* průběžná validace (když uživatel píše) */}
+            {!isValid && !error ? (
+              <p className="mt-1 text-xs text-slate-400">{errorMsg}</p>
             ) : null}
+
+            {/* “tvrdá” chyba po submitu */}
+            {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
           </div>
 
           <div className="md:col-span-3">
@@ -170,7 +179,14 @@ export default function Movements() {
           <div className="md:col-span-1 flex items-end">
             <button
               type="submit"
-              className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900"
+              disabled={!isValid}
+              className={[
+                "w-full rounded-xl px-4 py-2 text-sm font-medium",
+                isValid
+                  ? "bg-emerald-500 text-slate-900"
+                  : "bg-slate-700 text-slate-300 opacity-60 cursor-not-allowed",
+              ].join(" ")}
+              title={!isValid ? errorMsg : "Add movement"}
             >
               Add
             </button>

@@ -4,11 +4,11 @@ import { items as seedItems, movements as seedMovements } from "../data/mockData
 
 const LS_KEY = "inventory.movements.v1";
 
-function loadMovement () {
+function loadMovements () {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return seedMovements;
-    const parsed = JSON.parser(raw);
+    const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed :seedMovements;
   } catch {
     return seedMovements;
@@ -16,7 +16,7 @@ function loadMovement () {
 }
 export function InventoryProvider({ children }) {
   const [items] = useState(seedItems);
-  const [movements, setMovements] = useState(() => loadMovement());
+  const [movements, setMovements] = useState(() => loadMovements());
 
   useEffect(() => {
     try {
@@ -25,7 +25,7 @@ export function InventoryProvider({ children }) {
       //ignore
     }
   }, [movements]);
-  
+
   function addMovement({ itemId, type, qty, note }) {
     const newMovement = {
       id: crypto.randomUUID(),
