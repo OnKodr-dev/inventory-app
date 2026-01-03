@@ -28,12 +28,12 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Items() {
-  const { items, movements, addItem, deleteItem } = useInventory();
+  const { items, movements, addItem, deleteItem, updateItem } = useInventory();
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL"); // ALL | LOW | OUT
 
-  // form state
+  // Add form state
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
   const [unit, setUnit] = useState("ks");
@@ -42,10 +42,14 @@ export default function Items() {
   const [formError, setFormError] = useState("");
   const [actionError, setActionError] = useState("");
 
-  const stockById = useMemo(
-    () => computeStockByItemId(movements),
-    [movements]
-  );
+  // ✅ Edit state
+  const [editingId, setEditingId] = useState(null); // string | null
+  const [editName, setEditName] = useState("");
+  const [editSku, setEditSku] = useState("");
+  const [editUnit, setEditUnit] = useState("ks");
+  const [editMinStock, setEditMinStock] = useState(0);
+
+  const stockById = useMemo(() => computeStockByItemId(movements), [movements]);
 
   const enrichedBase = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -59,10 +63,7 @@ export default function Items() {
       })
       .filter((it) => {
         if (!q) return true;
-        return (
-          it.name.toLowerCase().includes(q) ||
-          it.sku.toLowerCase().includes(q)
-        );
+        return it.name.toLowerCase().includes(q) || it.sku.toLowerCase().includes(q);
       });
   }, [items, stockById, query]);
 
@@ -106,10 +107,9 @@ export default function Items() {
       return;
     }
 
-    // reset formu
     setName("");
     setSku("");
-    setUnit("pcs");
+    setUnit("ks");
     setMinStock(0);
   }
 
@@ -117,9 +117,7 @@ export default function Items() {
     setActionError("");
     setFormError("");
 
-    const ok = window.confirm(
-      `Smazat item "${it.name}" (${it.sku})?`
-    );
+    const ok = window.confirm(`Smazat item "${it.name}" (${it.sku})?`);
     if (!ok) return;
 
     const res = deleteItem(it.id);
@@ -134,7 +132,69 @@ export default function Items() {
       setActionError("Nepodařilo se smazat item.");
       return;
     }
+
+    // když smažeš item, který byl zrovna editovaný, ukonči edit
+    if (editingId === it.id) {
+      setEditingId(null);
+    }
   }
+
+  // ✅ start edit (naplní draft inputy hodnotama z řádku)
+  function startEdit(it) {
+    setActionError("");
+    setFormError("");
+
+    setEditingId(it.id);
+    setEditName(it.name);
+    setEditSku(it.sku);
+    setEditUnit(it.unit);
+    setEditMinStock(it.minStock);
+  }
+
+  // ✅ cancel edit (zahodí draft)
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+    setEditSku("");
+    setEditUnit("ks");
+    setEditMinStock(0);
+  }
+
+  // ✅ save edit (validace + updateItem)
+  function saveEdit(id) {
+    setActionError("");
+    setFormError("");
+
+    const nextName = editName.trim();
+    const nextSku = editSku.trim();
+    const nextUnit = editUnit.trim();
+    const nextMin = Number(editMinStock);
+
+    if (!nextName || !nextSku) {
+      setActionError("Name a SKU nesmí být prázdné.");
+      return;
+    }
+
+    // kontrola unikátnosti SKU (mimo editovaný item)
+    const skuClash = items.some(
+      (it) => it.id !== id && it.sku.toLowerCase() === nextSku.toLowerCase()
+    );
+    if (skuClash) {
+      setActionError("SKU už existuje. Musí být unikátní.");
+      return;
+    }
+
+    updateItem(id, {
+      name: nextName,
+      sku: nextSku,
+      unit: nextUnit || "ks",
+      minStock: Number.isFinite(nextMin) ? nextMin : 0,
+    });
+
+    setEditingId(null);
+  }
+
+  const isEditing = (id) => editingId === id;
 
   return (
     <div className="space-y-6">
@@ -161,9 +221,7 @@ export default function Items() {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">Add item</h2>
-          <div className="text-xs text-slate-400">
-            Tip: SKU drž unikátní (např. “HDMI-2M”)
-          </div>
+          <div className="text-xs text-slate-400">Jednotky sjednocené na “ks”.</div>
         </div>
 
         <form onSubmit={onAddItem} className="mt-4 grid gap-3 md:grid-cols-4">
@@ -199,7 +257,7 @@ export default function Items() {
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
-              placeholder="pcs, m, kg..."
+              placeholder="ks, m, kg..."
             />
           </div>
 
@@ -240,10 +298,8 @@ export default function Items() {
       {/* FILTER BAR */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-300">
-          Showing{" "}
-          <span className="font-semibold text-slate-100">{rows.length}</span> of{" "}
-          <span className="font-semibold text-slate-100">{counts.all}</span>{" "}
-          items
+          Showing <span className="font-semibold text-slate-100">{rows.length}</span> of{" "}
+          <span className="font-semibold text-slate-100">{counts.all}</span> items
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -261,6 +317,7 @@ export default function Items() {
         </div>
       </div>
 
+      {/* TABLE */}
       <div className="overflow-hidden rounded-2xl border border-slate-800">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-900/40 text-slate-300">
@@ -277,20 +334,70 @@ export default function Items() {
           <tbody className="divide-y divide-slate-800">
             {rows.map((it) => (
               <tr key={it.id} className="hover:bg-slate-900/20">
+                {/* ITEM */}
                 <td className="px-4 py-3">
-                  <div className="font-medium">{it.name}</div>
-                  <div className="text-xs text-slate-400">Unit: {it.unit}</div>
+                  {isEditing(it.id) ? (
+                    <div className="space-y-2">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                        placeholder="Name"
+                      />
+                      <div className="text-xs text-slate-400">
+                        Unit:
+                        <input
+                          value={editUnit}
+                          onChange={(e) => setEditUnit(e.target.value)}
+                          className="ml-2 w-24 rounded-lg border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs outline-none focus:border-slate-600"
+                          placeholder="ks"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="font-medium">{it.name}</div>
+                      <div className="text-xs text-slate-400">Unit: {it.unit}</div>
+                    </>
+                  )}
                 </td>
 
-                <td className="px-4 py-3 text-slate-200">{it.sku}</td>
+                {/* SKU */}
+                <td className="px-4 py-3 text-slate-200">
+                  {isEditing(it.id) ? (
+                    <input
+                      value={editSku}
+                      onChange={(e) => setEditSku(e.target.value)}
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                      placeholder="SKU"
+                    />
+                  ) : (
+                    it.sku
+                  )}
+                </td>
 
+                {/* STOCK */}
                 <td className="px-4 py-3">
                   <span className="font-semibold">{it.stock}</span>{" "}
                   <span className="text-slate-400">{it.unit}</span>
                 </td>
 
-                <td className="px-4 py-3 text-slate-200">{it.minStock}</td>
+                {/* MIN */}
+                <td className="px-4 py-3 text-slate-200">
+                  {isEditing(it.id) ? (
+                    <input
+                      type="number"
+                      value={editMinStock}
+                      onChange={(e) => setEditMinStock(e.target.value)}
+                      className="w-24 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                      min="0"
+                    />
+                  ) : (
+                    it.minStock
+                  )}
+                </td>
 
+                {/* STATUS */}
                 <td className="px-4 py-3">
                   {it.isOut ? (
                     <Badge>Out of stock</Badge>
@@ -301,14 +408,44 @@ export default function Items() {
                   )}
                 </td>
 
+                {/* ACTIONS */}
                 <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => onDeleteItem(it)}
-                    className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
-                  >
-                    Delete
-                  </button>
+                  {isEditing(it.id) ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(it.id)}
+                        className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-medium text-slate-900"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(it)}
+                        className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onDeleteItem(it)}
+                        className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
