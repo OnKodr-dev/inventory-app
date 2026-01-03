@@ -136,7 +136,6 @@ export default function Movements() {
     >
         Reset data
     </button>
-
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <h2 className="font-semibold">Add movement</h2>
 
