@@ -31,7 +31,17 @@ export default function Movements() {
     const numQty = Number(qty);
 
     if (!itemId) return;
-    if (!Number.isFinite(numQty) || numQty <= 0) return;
+    if (!Number.isFinite(numQty)) return;
+
+    // IN/OUT: qty musí být kladné
+    if (type === "IN" || type === "OUT") {
+      if (numQty <= 0) return;
+    }
+
+    // ADJUST: dovolíme i záporné hodnoty (korekce), ale 0 nedává smysl
+    if (type === "ADJUST") {
+      if (numQty === 0) return;
+    }
 
     addMovement({
       itemId,
@@ -82,6 +92,12 @@ export default function Movements() {
               <option value="OUT">OUT</option>
               <option value="ADJUST">ADJUST</option>
             </select>
+
+            <p className="mt-1 text-xs text-slate-400">
+              {type === "ADJUST"
+                ? "ADJUST = korekce (+/-), např. -2 když chybí kusy."
+                : "IN/OUT = příjem / výdej (qty musí být kladné)."}
+            </p>
           </div>
 
           <div>
@@ -90,7 +106,6 @@ export default function Movements() {
               type="number"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
-              min="1"
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             />
           </div>
@@ -147,12 +162,23 @@ export default function Movements() {
                 <td className="px-4 py-3 font-medium">{m.type}</td>
 
                 <td className="px-4 py-3">
-                  <span className="font-semibold">{m.qty}</span>
+                  <span className="font-semibold">
+                    {m.type === "IN" ? "+" : m.type === "OUT" ? "-" : ""}
+                    {m.qty}
+                  </span>
                 </td>
 
                 <td className="px-4 py-3 text-slate-300">{m.note}</td>
               </tr>
             ))}
+
+            {sorted.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-slate-400" colSpan={5}>
+                  Zatím žádné pohyby.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
