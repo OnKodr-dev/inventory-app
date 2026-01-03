@@ -6,6 +6,23 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString();
 }
 
+function FilterPill({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-full border px-3 py-1 text-xs font-medium",
+        active
+          ? "border-slate-600 bg-slate-800/60 text-slate-100"
+          : "border-slate-800 bg-slate-900/20 text-slate-300 hover:bg-slate-900/40",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Movements() {
   const { items, movements, addMovement } = useInventory();
 
@@ -14,6 +31,9 @@ export default function Movements() {
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+
+  // filtr tabulky
+  const [filter, setFilter] = useState("ALL"); // ALL | IN | OUT | ADJUST
 
   const itemById = useMemo(() => {
     const map = {};
@@ -31,7 +51,13 @@ export default function Movements() {
     );
   }, [movements]);
 
-  // 👉 UX validace pro disabled button (vypočítá se průběžně)
+  // odfiltrované řádky do tabulky
+  const filtered = useMemo(() => {
+    if (filter === "ALL") return sorted;
+    return sorted.filter((m) => m.type === filter);
+  }, [sorted, filter]);
+
+  // UX validace pro disabled button (vypočítá se průběžně)
   const { isValid, errorMsg } = useMemo(() => {
     if (!itemId) return { isValid: false, errorMsg: "Vyber item." };
 
@@ -194,6 +220,32 @@ export default function Movements() {
         </form>
       </div>
 
+      {/* FILTER BAR */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-300">
+          Showing <span className="font-semibold text-slate-100">{filtered.length}</span>{" "}
+          of <span className="font-semibold text-slate-100">{sorted.length}</span> movements
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <FilterPill active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+            All
+          </FilterPill>
+          <FilterPill active={filter === "IN"} onClick={() => setFilter("IN")}>
+            IN
+          </FilterPill>
+          <FilterPill active={filter === "OUT"} onClick={() => setFilter("OUT")}>
+            OUT
+          </FilterPill>
+          <FilterPill
+            active={filter === "ADJUST"}
+            onClick={() => setFilter("ADJUST")}
+          >
+            ADJUST
+          </FilterPill>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-slate-800">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-900/40 text-slate-300">
@@ -207,7 +259,7 @@ export default function Movements() {
           </thead>
 
           <tbody className="divide-y divide-slate-800">
-            {sorted.map((m) => (
+            {filtered.map((m) => (
               <tr key={m.id} className="hover:bg-slate-900/20">
                 <td className="px-4 py-3 text-slate-300">
                   {formatDate(m.createdAt)}
@@ -235,10 +287,10 @@ export default function Movements() {
               </tr>
             ))}
 
-            {sorted.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-slate-400" colSpan={5}>
-                  Zatím žádné pohyby.
+                  Žádné pohyby pro filtr: <span className="font-semibold">{filter}</span>
                 </td>
               </tr>
             )}
