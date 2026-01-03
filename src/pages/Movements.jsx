@@ -24,7 +24,7 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Movements() {
-  const { items, movements, addMovement } = useInventory();
+  const { items, movements, addMovement, resetMovements } = useInventory();
 
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   const [type, setType] = useState("IN");
@@ -120,6 +120,22 @@ export default function Movements() {
         <h1 className="text-2xl font-semibold">Movements</h1>
         <p className="mt-1 text-slate-300">Přidávej a sleduj skladové pohyby.</p>
       </div>
+      <button
+        type="button"
+        onClick={() => {
+        const ok = window.confirm("Opravdu chceš resetnout data na původní seed?");
+        if (!ok) return;
+
+        resetMovements();
+        setError("");
+        setType("IN");
+        setQty(1);
+        setNote("");
+        }}
+        className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+    >
+        Reset data
+    </button>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <h2 className="font-semibold">Add movement</h2>

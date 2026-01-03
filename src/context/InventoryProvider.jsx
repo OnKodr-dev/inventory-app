@@ -39,8 +39,17 @@ export function InventoryProvider({ children }) {
     setMovements((prev) => [newMovement, ...prev]);
   }
 
+  function resetMovements() {
+    setMovements(seedMovements);
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      //ignore
+    }
+  }
+
   const value = useMemo(
-    () => ({ items, movements, addMovement }),
+    () => ({ items, movements, addMovement, resetMovements }),
     [items, movements]
   );
 
