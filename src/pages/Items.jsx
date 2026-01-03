@@ -28,20 +28,29 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Items() {
-  const { items, movements } = useInventory();
+  const { items, movements, addItem, deleteItem } = useInventory();
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL"); // ALL | LOW | OUT
+
+  // form state
+  const [name, setName] = useState("");
+  const [sku, setSku] = useState("");
+  const [unit, setUnit] = useState("ks");
+  const [minStock, setMinStock] = useState(0);
+
+  const [formError, setFormError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   const stockById = useMemo(
     () => computeStockByItemId(movements),
     [movements]
   );
 
-  const rows = useMemo(() => {
+  const enrichedBase = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    const enriched = items
+    return items
       .map((it) => {
         const stock = stockById[it.id] ?? 0;
         const isLow = stock < it.minStock;
@@ -55,36 +64,77 @@ export default function Items() {
           it.sku.toLowerCase().includes(q)
         );
       });
+  }, [items, stockById, query]);
 
-    if (filter === "LOW") return enriched.filter((it) => it.isLow);
-    if (filter === "OUT") return enriched.filter((it) => it.isOut);
-    return enriched;
-  }, [query, stockById, items, filter]);
+  const rows = useMemo(() => {
+    if (filter === "LOW") return enrichedBase.filter((it) => it.isLow);
+    if (filter === "OUT") return enrichedBase.filter((it) => it.isOut);
+    return enrichedBase;
+  }, [enrichedBase, filter]);
 
   const counts = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
-    const base = items
-      .map((it) => {
-        const stock = stockById[it.id] ?? 0;
-        const isLow = stock < it.minStock;
-        const isOut = stock === 0;
-        return { ...it, stock, isLow, isOut };
-      })
-      .filter((it) => {
-        if (!q) return true;
-        return (
-          it.name.toLowerCase().includes(q) ||
-          it.sku.toLowerCase().includes(q)
-        );
-      });
-
-    const all = base.length;
-    const low = base.filter((it) => it.isLow).length;
-    const out = base.filter((it) => it.isOut).length;
-
+    const all = enrichedBase.length;
+    const low = enrichedBase.filter((it) => it.isLow).length;
+    const out = enrichedBase.filter((it) => it.isOut).length;
     return { all, low, out };
-  }, [items, stockById, query]);
+  }, [enrichedBase]);
+
+  function onAddItem(e) {
+    e.preventDefault();
+    setFormError("");
+    setActionError("");
+
+    const nextMin = Number(minStock);
+
+    const res = addItem({
+      name: name.trim(),
+      sku: sku.trim(),
+      unit: unit.trim(),
+      minStock: Number.isFinite(nextMin) ? nextMin : 0,
+    });
+
+    if (!res?.ok) {
+      if (res?.reason === "NAME_OR_SKU_EMPTY") {
+        setFormError("Name a SKU nesmí být prázdné.");
+        return;
+      }
+      if (res?.reason === "SKU_EXISTS") {
+        setFormError("SKU už existuje. Musí být unikátní.");
+        return;
+      }
+      setFormError("Nepodařilo se přidat item.");
+      return;
+    }
+
+    // reset formu
+    setName("");
+    setSku("");
+    setUnit("pcs");
+    setMinStock(0);
+  }
+
+  function onDeleteItem(it) {
+    setActionError("");
+    setFormError("");
+
+    const ok = window.confirm(
+      `Smazat item "${it.name}" (${it.sku})?`
+    );
+    if (!ok) return;
+
+    const res = deleteItem(it.id);
+
+    if (!res?.ok) {
+      if (res?.reason === "ITEM_HAS_MOVEMENTS") {
+        setActionError(
+          "Tento item nejde smazat, protože má historii pohybů. (Nejdřív smaž movements nebo udělej reset.)"
+        );
+        return;
+      }
+      setActionError("Nepodařilo se smazat item.");
+      return;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -105,6 +155,86 @@ export default function Items() {
             placeholder="e.g. HDMI, USBC-65W..."
           />
         </div>
+      </div>
+
+      {/* ADD ITEM */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">Add item</h2>
+          <div className="text-xs text-slate-400">
+            Tip: SKU drž unikátní (např. “HDMI-2M”)
+          </div>
+        </div>
+
+        <form onSubmit={onAddItem} className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-400">Name</label>
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setFormError("");
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+              placeholder="e.g. HDMI cable"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400">SKU</label>
+            <input
+              value={sku}
+              onChange={(e) => {
+                setSku(e.target.value);
+                setFormError("");
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+              placeholder="e.g. HDMI-2M"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400">Unit</label>
+            <input
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+              placeholder="pcs, m, kg..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400">Min stock</label>
+            <input
+              type="number"
+              value={minStock}
+              onChange={(e) => setMinStock(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
+              min="0"
+            />
+          </div>
+
+          <div className="md:col-span-3">
+            {formError ? (
+              <p className="text-sm text-red-300">{formError}</p>
+            ) : actionError ? (
+              <p className="text-sm text-red-300">{actionError}</p>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Přidáním itemu se vytvoří položka se stockem 0 (dokud nepřidáš IN).
+              </p>
+            )}
+          </div>
+
+          <div className="md:col-span-1 flex items-end">
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900"
+            >
+              Add
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* FILTER BAR */}
@@ -140,6 +270,7 @@ export default function Items() {
               <th className="px-4 py-3">Stock</th>
               <th className="px-4 py-3">Min</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
 
@@ -169,12 +300,22 @@ export default function Items() {
                     <span className="text-slate-300">OK</span>
                   )}
                 </td>
+
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteItem(it)}
+                    className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
 
             {rows.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-slate-400" colSpan={6}>
                   No items match your search/filter.
                 </td>
               </tr>

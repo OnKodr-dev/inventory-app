@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useInventory } from "../context/useInventory.js";
 import { computeStockByItemId } from "../utils/stock.js";
 
@@ -24,7 +24,8 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Movements() {
-  const { items, movements, addMovement, resetMovements } = useInventory();
+  const { items, movements, addMovement, resetMovements, replaceMovements } =
+    useInventory();
 
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   const [type, setType] = useState("IN");
@@ -32,8 +33,8 @@ export default function Movements() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
-  // filtr tabulky
   const [filter, setFilter] = useState("ALL"); // ALL | IN | OUT | ADJUST
+  const fileRef = useRef(null);
 
   const itemById = useMemo(() => {
     const map = {};
@@ -51,13 +52,11 @@ export default function Movements() {
     );
   }, [movements]);
 
-  // odfiltrované řádky do tabulky
   const filtered = useMemo(() => {
     if (filter === "ALL") return sorted;
     return sorted.filter((m) => m.type === filter);
   }, [sorted, filter]);
 
-  // UX validace pro disabled button (vypočítá se průběžně)
   const { isValid, errorMsg } = useMemo(() => {
     if (!itemId) return { isValid: false, errorMsg: "Vyber item." };
 
@@ -92,7 +91,6 @@ export default function Movements() {
   function onSubmit(e) {
     e.preventDefault();
 
-    // pojistka – kdyby někdo obešel disabled (např. Enter / devtools)
     if (!isValid) {
       setError(errorMsg || "Formulář není validní.");
       return;
@@ -114,28 +112,109 @@ export default function Movements() {
     setNote("");
   }
 
+  function onExport() {
+    try {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        movements,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `inventory-movements-${date}.json`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Export se nepovedl.");
+    }
+  }
+
+  async function onImportFile(file) {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      const arr = Array.isArray(parsed) ? parsed : parsed?.movements;
+      if (!Array.isArray(arr)) throw new Error("Bad file");
+
+      replaceMovements(arr);
+      setError("");
+    } catch {
+      setError("Import se nepovedl. Očekávám JSON s polem movements.");
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Movements</h1>
-        <p className="mt-1 text-slate-300">Přidávej a sleduj skladové pohyby.</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => {
-        const ok = window.confirm("Opravdu chceš resetnout data na původní seed?");
-        if (!ok) return;
+      {/* HEADER + ACTIONS */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Movements</h1>
+          <p className="mt-1 text-slate-300">
+            Přidávej a sleduj skladové pohyby.
+          </p>
+        </div>
 
-        resetMovements();
-        setError("");
-        setType("IN");
-        setQty(1);
-        setNote("");
-        }}
-        className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
-    >
-        Reset data
-    </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onExport}
+            className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+          >
+            Export JSON
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+          >
+            Import JSON
+          </button>
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onImportFile(file);
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              const ok = window.confirm(
+                "Opravdu chceš resetnout data na původní seed?"
+              );
+              if (!ok) return;
+
+              resetMovements();
+              setError("");
+              setType("IN");
+              setQty(1);
+              setNote("");
+            }}
+            className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+          >
+            Reset data
+          </button>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <h2 className="font-semibold">Add movement</h2>
 
@@ -198,12 +277,10 @@ export default function Movements() {
               className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm outline-none focus:border-slate-600"
             />
 
-            {/* průběžná validace (když uživatel píše) */}
             {!isValid && !error ? (
               <p className="mt-1 text-xs text-slate-400">{errorMsg}</p>
             ) : null}
 
-            {/* “tvrdá” chyba po submitu */}
             {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
           </div>
 
@@ -238,8 +315,13 @@ export default function Movements() {
       {/* FILTER BAR */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-300">
-          Showing <span className="font-semibold text-slate-100">{filtered.length}</span>{" "}
-          of <span className="font-semibold text-slate-100">{sorted.length}</span> movements
+          Showing{" "}
+          <span className="font-semibold text-slate-100">
+            {filtered.length}
+          </span>{" "}
+          of{" "}
+          <span className="font-semibold text-slate-100">{sorted.length}</span>{" "}
+          movements
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -305,7 +387,8 @@ export default function Movements() {
             {filtered.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-slate-400" colSpan={5}>
-                  Žádné pohyby pro filtr: <span className="font-semibold">{filter}</span>
+                  Žádné pohyby pro filtr:{" "}
+                  <span className="font-semibold">{filter}</span>
                 </td>
               </tr>
             )}
