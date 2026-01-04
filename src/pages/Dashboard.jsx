@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useInventory } from "../context/useInventory.js";
 import { computeStockByItemId } from "../utils/stock.js";
 
@@ -24,8 +25,41 @@ function Badge({ children }) {
   );
 }
 
+function GhostButton({ children, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40",
+        disabled ? "opacity-50 cursor-not-allowed hover:bg-slate-900/20" : "",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Dashboard() {
-  const { items, movements } = useInventory();
+  const navigate = useNavigate();
+  const { items: rawItems, movements: rawMovements } = useInventory();
+
+  // guard (ať nikdy nespadne)
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const movements = Array.isArray(rawMovements) ? rawMovements : [];
+
+  function goToMovementsForItem(id) {
+    navigate(`/movements?itemId=${encodeURIComponent(id)}`);
+  }
+
+  function goToMovements() {
+    navigate("/movements");
+  }
+
+  function goToItems() {
+    navigate("/items");
+  }
 
   const itemById = useMemo(() => {
     const map = {};
@@ -71,17 +105,37 @@ export default function Dashboard() {
     };
   }, [items.length, movements.length, lowStockItems.length, outOfStockItems.length]);
 
+  const totalAlerts = stats.lowCount + stats.outCount;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="mt-1 text-slate-300">Rychlý přehled: stav skladu a poslední pohyby.</p>
+      {/* HEADER */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="mt-1 text-slate-300">
+            Rychlý přehled: stav skladu a poslední pohyby.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <GhostButton onClick={goToItems} disabled={items.length === 0}>
+            Open Items
+          </GhostButton>
+          <GhostButton onClick={goToMovements}>
+            Open Movements
+          </GhostButton>
+        </div>
       </div>
 
       {/* STAT CARDS */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Items" value={stats.totalItems} hint="Celkem položek ve skladu" />
-        <StatCard label="Movements" value={stats.totalMovements} hint="Celkem zaznamenaných pohybů" />
+        <StatCard
+          label="Movements"
+          value={stats.totalMovements}
+          hint="Celkem zaznamenaných pohybů"
+        />
         <StatCard label="Low stock" value={stats.lowCount} hint="Pod minimem (ale ne 0)" />
         <StatCard label="Out of stock" value={stats.outCount} hint="Aktuálně 0 na skladě" />
       </div>
@@ -91,7 +145,7 @@ export default function Dashboard() {
         <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Stock alerts</h2>
-            <Badge>{stats.lowCount + stats.outCount} total</Badge>
+            <Badge>{totalAlerts} total</Badge>
           </div>
 
           <div className="mt-4 space-y-4">
@@ -114,11 +168,18 @@ export default function Dashboard() {
                         {it.sku} • min {it.minStock} {it.unit}
                       </div>
                     </div>
+
                     <div className="text-right">
                       <div className="font-semibold">
                         {it.stock} <span className="text-slate-400">{it.unit}</span>
                       </div>
                       <div className="text-xs text-slate-400">zero</div>
+
+                      <div className="mt-2">
+                        <GhostButton onClick={() => goToMovementsForItem(it.id)}>
+                          Add IN
+                        </GhostButton>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -148,11 +209,18 @@ export default function Dashboard() {
                         {it.sku} • min {it.minStock} {it.unit}
                       </div>
                     </div>
+
                     <div className="text-right">
                       <div className="font-semibold">
                         {it.stock} <span className="text-slate-400">{it.unit}</span>
                       </div>
                       <div className="text-xs text-slate-400">below min</div>
+
+                      <div className="mt-2">
+                        <GhostButton onClick={() => goToMovementsForItem(it.id)}>
+                          Add IN
+                        </GhostButton>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -167,8 +235,9 @@ export default function Dashboard() {
 
         {/* RECENT MOVEMENTS */}
         <div className="overflow-hidden rounded-2xl border border-slate-800">
-          <div className="bg-slate-900/40 px-4 py-3">
+          <div className="flex items-center justify-between bg-slate-900/40 px-4 py-3">
             <h2 className="font-semibold">Recent movements</h2>
+            <GhostButton onClick={goToMovements}>Open</GhostButton>
           </div>
 
           <div className="divide-y divide-slate-800">

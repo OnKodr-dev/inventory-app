@@ -14,16 +14,16 @@ function safeId() {
 function loadMovements() {
   try {
     const raw = localStorage.getItem(LS_MOVEMENTS_KEY);
-    if (!raw) return seedMovements;
+    const fallback = Array.isArray(seedMovements) ? seedMovements : [];
+
+    if (!raw) return normalizeMovements(fallback);
 
     const parsed = JSON.parse(raw);
     const arr = Array.isArray(parsed) ? parsed : parsed?.movements; // podporujeme i { movements: [...] }
-    return Array.isArray(arr) ? arr : (Array.isArray(seedMovements) ? seedMovements : []);
+    return normalizeMovements(Array.isArray(arr) ? arr : fallback);
   } catch {
-    return Array.isArray(seedMovements) ? seedMovements : [];
+    return normalizeMovements(Array.isArray(seedMovements) ? seedMovements : []);
   }
-  
-  
 }
 
 function loadItems() {
@@ -61,7 +61,24 @@ function normalizeItems(input) {
     .map(normalizeItem)
     .filter((it) => it.name && it.sku);
 }
+ function normalizeMovements(arr) {
+  if (!Array.isArray(arr)) return [];
 
+  const cleaned = arr
+    .filter((m) => m && typeof m === "object")
+    .map((m) => ({
+      id: typeof m.id === "string" ? m.id : safeId(),
+      itemId: String(m.itemId ?? ""),
+      type: m.type === "IN" || m.type === "OUT" || m.type === "ADJUST" ? m.type : "IN",
+      qty: Number(m.qty) || 0,
+      note: String(m.note ?? ""),
+      createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString(),
+    }))
+    .filter((m) => m.itemId);
+
+    cleaned.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return cleaned;
+ }
 /* -------------------- PROVIDER -------------------- */
 
 export function InventoryProvider({ children }) {
@@ -100,7 +117,7 @@ export function InventoryProvider({ children }) {
   }
 
   function resetMovements() {
-    setMovements(seedMovements);
+    setMovements(normalizeMovements(seedMovements));
     try {
       localStorage.removeItem(LS_MOVEMENTS_KEY);
     } catch {
@@ -108,9 +125,18 @@ export function InventoryProvider({ children }) {
     }
   }
 
+  function deleteMovement(id) {
+    setMovements((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  function undoLastMovement() {
+    setMovements((prev) => (prev.length ? prev.slice(1) : prev));
+  }
+  
+
   function replaceMovements(nextMovements) {
     if (!Array.isArray(nextMovements)) return;
-    setMovements(nextMovements);
+    setMovements(normalizeMovements(nextMovements));
   }
 
   /* -------------------- ITEMS API -------------------- */
@@ -189,12 +215,13 @@ export function InventoryProvider({ children }) {
     addMovement,
     resetMovements,
     replaceMovements,
-  
     addItem,
     updateItem,
     deleteItem,
     resetItems,
     replaceItems,
+    deleteMovement,
+    undoLastMovement,
   };
   
   

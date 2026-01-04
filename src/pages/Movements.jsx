@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useInventory } from "../context/useInventory.js";
 import { computeStockByItemId } from "../utils/stock.js";
 
@@ -24,8 +25,19 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Movements() {
-  const { items, movements, addMovement, resetMovements, replaceMovements } =
-    useInventory();
+  const {
+    items: rawItems,
+    movements: rawMovements,
+    addMovement,
+    resetMovements,
+    replaceMovements,
+    deleteMovement,
+    undoLastMovement,
+  } = useInventory();
+
+  // guard proti undefined (ať nikdy nespadne items.map / for..of)
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const movements = Array.isArray(rawMovements) ? rawMovements : [];
 
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   const [type, setType] = useState("IN");
@@ -51,6 +63,23 @@ export default function Movements() {
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
   }, [movements]);
+
+  // ✅ URL param support (?itemId=...)
+  const [searchParams] = useSearchParams();
+  const urlItemId = searchParams.get("itemId");
+
+  useEffect(() => {
+    // 1) když je itemId v URL a existuje, nastav ho
+    if (urlItemId && items.some((it) => it.id === urlItemId)) {
+      setItemId(urlItemId);
+      return;
+    }
+
+    // 2) fallback: když nemáme vybraný item a máme items, nastav první
+    if (!itemId && items.length > 0) {
+      setItemId(items[0].id);
+    }
+  }, [urlItemId, items, itemId]);
 
   const filtered = useMemo(() => {
     if (filter === "ALL") return sorted;
@@ -98,12 +127,10 @@ export default function Movements() {
 
     setError("");
 
-    const numQty = Number(qty);
-
     addMovement({
       itemId,
       type,
-      qty: numQty,
+      qty: Number(qty),
       note,
     });
 
@@ -155,6 +182,13 @@ export default function Movements() {
     }
   }
 
+  function onDeleteMovement(id) {
+    const ok = window.confirm("Smazat tento pohyb?");
+    if (!ok) return;
+    deleteMovement(id);
+    setError("");
+  }
+
   return (
     <div className="space-y-6">
       {/* HEADER + ACTIONS */}
@@ -167,6 +201,25 @@ export default function Movements() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={movements.length === 0}
+            onClick={() => {
+              const ok = window.confirm("Undo poslední pohyb?");
+              if (!ok) return;
+              undoLastMovement();
+              setError("");
+            }}
+            className={[
+              "rounded-xl border px-4 py-2 text-sm",
+              movements.length === 0
+                ? "border-slate-800 bg-slate-900/10 text-slate-500 cursor-not-allowed"
+                : "border-slate-800 bg-slate-900/20 text-slate-200 hover:bg-slate-900/40",
+            ].join(" ")}
+          >
+            Undo last
+          </button>
+
           <button
             type="button"
             onClick={onExport}
@@ -215,6 +268,7 @@ export default function Movements() {
         </div>
       </div>
 
+      {/* ADD MOVEMENT */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <h2 className="font-semibold">Add movement</h2>
 
@@ -316,9 +370,7 @@ export default function Movements() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-300">
           Showing{" "}
-          <span className="font-semibold text-slate-100">
-            {filtered.length}
-          </span>{" "}
+          <span className="font-semibold text-slate-100">{filtered.length}</span>{" "}
           of{" "}
           <span className="font-semibold text-slate-100">{sorted.length}</span>{" "}
           movements
@@ -343,6 +395,7 @@ export default function Movements() {
         </div>
       </div>
 
+      {/* TABLE */}
       <div className="overflow-hidden rounded-2xl border border-slate-800">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-900/40 text-slate-300">
@@ -352,6 +405,7 @@ export default function Movements() {
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Qty</th>
               <th className="px-4 py-3">Note</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
 
@@ -381,12 +435,22 @@ export default function Movements() {
                 </td>
 
                 <td className="px-4 py-3 text-slate-300">{m.note}</td>
+
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteMovement(m.id)}
+                    className="rounded-lg border border-slate-800 bg-slate-900/20 px-3 py-1 text-xs text-slate-200 hover:bg-slate-900/40"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
 
             {filtered.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-slate-400" colSpan={6}>
                   Žádné pohyby pro filtr:{" "}
                   <span className="font-semibold">{filter}</span>
                 </td>
