@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useInventory } from "../context/useInventory.js";
 import { computeStockByItemId } from "../utils/stock.js";
 
@@ -28,7 +28,19 @@ function FilterPill({ active, children, onClick }) {
 }
 
 export default function Items() {
-  const { items, movements, addItem, deleteItem, updateItem } = useInventory();
+  const {
+    items: rawItems,
+    movements: rawMovements,
+    addItem,
+    deleteItem,
+    updateItem,
+    resetItems,
+    replaceItems,
+  } = useInventory();
+
+  // guardy proti undefined
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const movements = Array.isArray(rawMovements) ? rawMovements : [];
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL"); // ALL | LOW | OUT
@@ -49,6 +61,9 @@ export default function Items() {
   const [editUnit, setEditUnit] = useState("ks");
   const [editMinStock, setEditMinStock] = useState(0);
 
+  // Import input ref
+  const fileRef = useRef(null);
+
   const stockById = useMemo(() => computeStockByItemId(movements), [movements]);
 
   const enrichedBase = useMemo(() => {
@@ -63,7 +78,9 @@ export default function Items() {
       })
       .filter((it) => {
         if (!q) return true;
-        return it.name.toLowerCase().includes(q) || it.sku.toLowerCase().includes(q);
+        return (
+          it.name.toLowerCase().includes(q) || it.sku.toLowerCase().includes(q)
+        );
       });
   }, [items, stockById, query]);
 
@@ -133,7 +150,6 @@ export default function Items() {
       return;
     }
 
-    // když smažeš item, který byl zrovna editovaný, ukonči edit
     if (editingId === it.id) {
       setEditingId(null);
     }
@@ -196,14 +212,75 @@ export default function Items() {
 
   const isEditing = (id) => editingId === id;
 
+  /* -------------------- EXPORT / IMPORT / RESET ITEMS -------------------- */
+
+  function onExportItems() {
+    try {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        items,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `inventory-items-${date}.json`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    } catch {
+      setActionError("Export se nepovedl.");
+    }
+  }
+
+  async function onImportFile(file) {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      const arr = Array.isArray(parsed) ? parsed : parsed?.items;
+      if (!Array.isArray(arr)) throw new Error("Bad file");
+
+      replaceItems(arr);
+      setActionError("");
+      setFormError("");
+
+      // ukonči edit, kdyby import přepsal data
+      cancelEdit();
+    } catch {
+      setActionError("Import se nepovedl. Očekávám JSON s polem items.");
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  function onResetItems() {
+    const ok = window.confirm("Opravdu chceš resetnout items na původní seed?");
+    if (!ok) return;
+
+    resetItems();
+    setActionError("");
+    setFormError("");
+    cancelEdit();
+
+    setName("");
+    setSku("");
+    setUnit("ks");
+    setMinStock(0);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Items</h1>
-          <p className="mt-1 text-slate-300">
-            Stav se počítá ze skladových pohybů (IN/OUT/ADJUST).
-          </p>
         </div>
 
         <div className="w-full sm:w-72">
@@ -217,11 +294,52 @@ export default function Items() {
         </div>
       </div>
 
-      {/* ADD ITEM */}
+      {/* ADD ITEM + ACTIONS */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">Add item</h2>
-          <div className="text-xs text-slate-400">Jednotky sjednocené na “ks”.</div>
+          <div>
+            <h2 className="font-semibold">Add item</h2>
+            <div className="text-xs text-slate-400">
+              Jednotky sjednocené na “ks”.
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onExportItems}
+              className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+            >
+              Export JSON
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+            >
+              Import JSON
+            </button>
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onImportFile(file);
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={onResetItems}
+              className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900/40"
+            >
+              Reset items
+            </button>
+          </div>
         </div>
 
         <form onSubmit={onAddItem} className="mt-4 grid gap-3 md:grid-cols-4">
@@ -279,7 +397,8 @@ export default function Items() {
               <p className="text-sm text-red-300">{actionError}</p>
             ) : (
               <p className="text-sm text-slate-400">
-                Přidáním itemu se vytvoří položka se stockem 0 (dokud nepřidáš IN).
+                Přidáním itemu se vytvoří položka se stockem 0 (dokud nepřidáš
+                IN).
               </p>
             )}
           </div>
@@ -298,7 +417,8 @@ export default function Items() {
       {/* FILTER BAR */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-300">
-          Showing <span className="font-semibold text-slate-100">{rows.length}</span> of{" "}
+          Showing{" "}
+          <span className="font-semibold text-slate-100">{rows.length}</span> of{" "}
           <span className="font-semibold text-slate-100">{counts.all}</span> items
         </div>
 

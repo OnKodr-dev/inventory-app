@@ -57,10 +57,6 @@ export default function Dashboard() {
     navigate("/movements");
   }
 
-  function goToItems() {
-    navigate("/items");
-  }
-
   const itemById = useMemo(() => {
     const map = {};
     for (const it of items) map[it.id] = it;
@@ -113,18 +109,6 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="mt-1 text-slate-300">
-            Rychlý přehled: stav skladu a poslední pohyby.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <GhostButton onClick={goToItems} disabled={items.length === 0}>
-            Open Items
-          </GhostButton>
-          <GhostButton onClick={goToMovements}>
-            Open Movements
-          </GhostButton>
         </div>
       </div>
 

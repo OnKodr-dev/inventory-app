@@ -195,9 +195,6 @@ export default function Movements() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Movements</h1>
-          <p className="mt-1 text-slate-300">
-            Přidávej a sleduj skladové pohyby.
-          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -311,12 +308,6 @@ export default function Movements() {
               <option value="OUT">OUT</option>
               <option value="ADJUST">ADJUST</option>
             </select>
-
-            <p className="mt-1 text-xs text-slate-400">
-              {type === "ADJUST"
-                ? "ADJUST = korekce (+/-), např. -2 když chybí kusy."
-                : "IN/OUT = příjem / výdej (qty musí být kladné)."}
-            </p>
           </div>
 
           <div>
